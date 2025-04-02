@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Gemini Code Documentation
+    url: https://blossom-tarsier-434.notion.site/Gemini-Code-1c6c13716ff180db86a0c7f4b2da13ab?pvs=4
+    about: Check the documentation for answers to common questions
+  - name: Get API Key
+    url: https://makersuite.google.com/app/apikey
+    about: Get a Google API key for Gemini models
+  - name: GitHub Discussions
+    url: https://github.com/raizamartin/gemini-code/discussions
+    about: Please ask and answer questions here
