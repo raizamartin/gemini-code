@@ -168,13 +168,13 @@ class GrepTool(BaseTool):
             results = []
             files_to_search = []
             
-            # Using Path objects for more reliable path handling across platforms
+            # Use Path objects for more reliable path handling across platforms
             target_path_obj = Path(target_path)
             
             if include:
                 recursive = '**' in include
                 try:
-                    # Using pathlib for more reliable glob operation
+                    # Use pathlib for more reliable glob operation
                     if recursive:
                         glob_pattern = str(target_path_obj / include)
                         files_to_search = [str(p) for p in Path(target_path).glob(include)]
@@ -184,7 +184,7 @@ class GrepTool(BaseTool):
                 except Exception as glob_err:
                     return f"Error finding files with include pattern: {glob_err}"
             else:
-                # Walking directory tree manually to avoid platform-specific issues
+                # Walk directory tree manually to avoid platform-specific issues
                 for root, _, filenames in os.walk(target_path):
                     basename = os.path.basename(root)
                     if basename.startswith('.') or basename == '__pycache__':
@@ -206,7 +206,7 @@ class GrepTool(BaseTool):
                         for i, line in enumerate(f, 1):
                             if regex.search(line):
                                 matches_found_count += 1
-                                # Using pathlib for more reliable relative path calculation
+                                # Use pathlib for more reliable relative path calculation
                                 rel_path = os.path.relpath(file_path, target_path)
                                 if os.path.dirname(rel_path) == '':
                                     rel_path = f"./{rel_path}"

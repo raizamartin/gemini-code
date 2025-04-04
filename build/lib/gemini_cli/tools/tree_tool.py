@@ -38,9 +38,10 @@ class TreeTool(BaseTool):
         if depth is None:
             depth_limit = DEFAULT_TREE_DEPTH
         else:
+            # Clamp depth to be within reasonable limits
             depth_limit = max(1, min(depth, MAX_TREE_DEPTH))
             
-        # Adding path if specified
+        # Add path if specified
         target_path = "." # Default to current directory
         if path:
             target_path = path
@@ -48,6 +49,7 @@ class TreeTool(BaseTool):
         log.info(f"Creating directory tree for path: {target_path} with depth {depth_limit}")
         
         try:
+            # Check if path exists and is a directory
             if not os.path.exists(target_path):
                 log.error(f"Path does not exist: {target_path}")
                 return f"Error: Path does not exist: {target_path}"
@@ -56,14 +58,14 @@ class TreeTool(BaseTool):
                 log.error(f"Path is not a directory: {target_path}")
                 return f"Error: Path is not a directory: {target_path}"
                 
-            # Generating the tree structure using a recursive approach
+            # Generate the tree structure using a recursive approach
             result = []
             base_name = os.path.basename(target_path) or target_path
             result.append(base_name)
             
             self._generate_tree(target_path, "", result, 0, depth_limit)
             
-            # Limiting output size
+            # Limit output size
             output = "\n".join(result)
             if len(result) > 200:  # Limit lines
                 log.warning(f"Tree output for '{target_path}' exceeded 200 lines. Truncating.")
@@ -92,7 +94,7 @@ class TreeTool(BaseTool):
                 connector = "└── " if is_last else "├── "
                 new_prefix = prefix + ("    " if is_last else "│   ")
                 
-                # Adding entry to result
+                # Add entry to result
                 result.append(f"{prefix}{connector}{entry}")
                 
                 # Recursively process directories

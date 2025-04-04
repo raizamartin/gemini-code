@@ -52,7 +52,7 @@ class CreateDirectoryTool(BaseTool):
             return f"Error creating directory: {str(e)}"
 
 class LsTool(BaseTool):
-    """Tool to list directory contents in a platform independent way."""
+    """Tool to list directory contents in a platform-independent way."""
     name = "ls"
     description = "Lists the contents of a specified directory (detailed format, including hidden files)."
     args_schema: dict = {
@@ -67,7 +67,7 @@ class LsTool(BaseTool):
         """Executes directory listing command based on the current platform."""
         target_path = "."  # Default to current directory
         if path:
-            # Basic path safety ( prevent navigating outside workspace root if needed)
+            # Basic path safety - prevent navigating outside workspace root if needed
             target_path = os.path.normpath(path)  # Normalize path
             if target_path.startswith(".."):
                 log.warning(f"Attempted to access parent directory in ls path: {path}")
@@ -85,21 +85,23 @@ class LsTool(BaseTool):
                 log.error(f"Path is not a directory: {target_path}")
                 return f"Error: Path is not a directory: '{target_path}'"
             
-            # Getting all entries in the directory, including hidden files
+            # Get all entries in the directory, including hidden files
             entries = []
             for entry in os.listdir(target_path):
                 entry_path = os.path.join(target_path, entry)
                 stat_info = os.stat(entry_path)
                 
+                # Determine if it's a directory or file
                 mode = "d" if os.path.isdir(entry_path) else "-"
                 
+                # Get file size
                 size = stat_info.st_size if not os.path.isdir(entry_path) else ""
                 
-                # Geting last modified time
+                # Get last modified time
                 mtime = stat_info.st_mtime
                 last_modified = f"{mtime}"
                 try:
-                    # Trying to format the time in a more readable way
+                    # Try to format the time in a more readable way
                     from datetime import datetime
                     last_modified = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
                 except:
@@ -107,10 +109,10 @@ class LsTool(BaseTool):
                 
                 entries.append((mode, last_modified, size, entry))
             
-            # Sorting entries - directories first, then files
+            # Sort entries - directories first, then files
             entries.sort(key=lambda x: (x[0] != 'd', x[3].lower()))
             
-            # Formating output similar to ls -lA
+            # Format output similar to ls -lA
             output_lines = []
             for mode, last_modified, size, entry in entries:
                 size_str = f"{size}" if size != "" else ""
