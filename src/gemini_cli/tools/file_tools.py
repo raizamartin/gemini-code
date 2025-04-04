@@ -144,48 +144,91 @@ class EditTool(BaseTool):
         except IsADirectoryError: return f"Error: Cannot edit a directory: {file_path}"
         except Exception as e: log.error(f"Error editing file '{file_path}': {e}", exc_info=True); return f"Error editing file: {str(e)}"
 
-
 class GrepTool(BaseTool):
-    """Tool to search for patterns in files."""
+    """Tool to search for patterns in files, Windows-compatible."""
     name = "grep"
     description = "Search for a pattern (regex) in files within a directory."
+    
     def execute(self, pattern: str, path: str = '.', include: str | None = None) -> str:
-        # No CWD logging needed here for now, focusing on ls/glob/summarize
         try:
-            if ".." in path.split(os.path.sep): return f"Error: Invalid path '{path}'."
-            target_path = os.path.abspath(os.path.expanduser(path)); log.info(f"Grepping in {target_path} for '{pattern}' (Include: {include})")
-            if not os.path.isdir(target_path): return f"Error: Path is not a directory: {path}"
-            try: regex = re.compile(pattern)
-            except re.error as re_err: return f"Error: Invalid regex pattern: {pattern} ({re_err})"
-            results = []; files_to_search = []
+            if ".." in path.split(os.path.sep):
+                return f"Error: Invalid path '{path}'."
+                
+            target_path = os.path.abspath(os.path.expanduser(path))
+            log.info(f"Grepping in {target_path} for '{pattern}' (Include: {include})")
+            
+            if not os.path.isdir(target_path):
+                return f"Error: Path is not a directory: {path}"
+                
+            try:
+                regex = re.compile(pattern)
+            except re.error as re_err:
+                return f"Error: Invalid regex pattern: {pattern} ({re_err})"
+                
+            results = []
+            files_to_search = []
+            
+            # Using Path objects for more reliable path handling across platforms
+            target_path_obj = Path(target_path)
+            
             if include:
-                recursive = '**' in include; glob_pattern = os.path.join(target_path, include)
-                try: files_to_search = glob.glob(glob_pattern, recursive=recursive)
-                except Exception as glob_err: return f"Error finding files with include pattern: {glob_err}"
+                recursive = '**' in include
+                try:
+                    # Using pathlib for more reliable glob operation
+                    if recursive:
+                        glob_pattern = str(target_path_obj / include)
+                        files_to_search = [str(p) for p in Path(target_path).glob(include)]
+                    else:
+                        glob_pattern = str(target_path_obj / include)
+                        files_to_search = [str(p) for p in Path(target_path).glob(include)]
+                except Exception as glob_err:
+                    return f"Error finding files with include pattern: {glob_err}"
             else:
+                # Walking directory tree manually to avoid platform-specific issues
                 for root, _, filenames in os.walk(target_path):
                     basename = os.path.basename(root)
-                    if basename.startswith('.') or basename == '__pycache__': continue
+                    if basename.startswith('.') or basename == '__pycache__':
+                        continue
                     files_to_search.extend(os.path.join(root, filename) for filename in filenames)
+            
             log.info(f"Found {len(files_to_search)} potential files to search.")
-            files_searched_count = 0; matches_found_count = 0; max_matches = 500
+            files_searched_count = 0
+            matches_found_count = 0
+            max_matches = 500
+            
             for file_path in files_to_search:
-                if not os.path.isfile(file_path): continue
+                if not os.path.isfile(file_path):
+                    continue
+                    
                 files_searched_count += 1
                 try:
                     with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                         for i, line in enumerate(f, 1):
                             if regex.search(line):
-                                matches_found_count += 1; rel_path = os.path.relpath(file_path, target_path)
-                                if os.path.dirname(rel_path) == '': rel_path = f"./{rel_path}"
+                                matches_found_count += 1
+                                # Using pathlib for more reliable relative path calculation
+                                rel_path = os.path.relpath(file_path, target_path)
+                                if os.path.dirname(rel_path) == '':
+                                    rel_path = f"./{rel_path}"
                                 results.append(f"{rel_path}:{i}: {line.rstrip()}")
-                                if matches_found_count >= max_matches: results.append("--- Match limit reached ---"); break
-                except OSError: continue
-                except Exception as e: log.warning(f"Error grepping file {file_path}: {e}"); continue
-                if matches_found_count >= max_matches: break
+                                if matches_found_count >= max_matches:
+                                    results.append("--- Match limit reached ---")
+                                    break
+                except OSError:
+                    continue
+                except Exception as e:
+                    log.warning(f"Error grepping file {file_path}: {e}")
+                    continue
+                    
+                if matches_found_count >= max_matches:
+                    break
+                    
             log.info(f"Searched {files_searched_count} files, found {matches_found_count} matches.")
             return "\n".join(results) if results else f"No matches found for pattern: {pattern}"
-        except Exception as e: log.error(f"Error during grep: {e}", exc_info=True); return f"Error searching files: {str(e)}"
+            
+        except Exception as e:
+            log.error(f"Error during grep: {e}", exc_info=True)
+            return f"Error searching files: {str(e)}"
 
 class GlobTool(BaseTool):
     """Tool to find files using glob patterns."""

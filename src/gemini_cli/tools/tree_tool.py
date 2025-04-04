@@ -4,14 +4,13 @@ Tool for displaying directory structure using the 'tree' command.
 import subprocess
 import logging
 from google.generativeai.types import FunctionDeclaration, Tool
-
+import os
 from .base import BaseTool
 
 log = logging.getLogger(__name__)
 
 DEFAULT_TREE_DEPTH = 3
 MAX_TREE_DEPTH = 10
-
 class TreeTool(BaseTool):
     name: str = "tree"
     description: str = (
@@ -34,59 +33,73 @@ class TreeTool(BaseTool):
     required_args: list[str] = []
 
     def execute(self, path: str | None = None, depth: int | None = None) -> str:
-        """Executes the tree command."""
+        """Creates a tree view of the directory structure using native Python."""
         
         if depth is None:
             depth_limit = DEFAULT_TREE_DEPTH
         else:
-            # Clamp depth to be within reasonable limits
             depth_limit = max(1, min(depth, MAX_TREE_DEPTH))
             
-        command = ['tree', f'-L {depth_limit}']
-        
-        # Add path if specified
+        # Adding path if specified
         target_path = "." # Default to current directory
         if path:
-            # Basic path validation/sanitization might be needed depending on security context
             target_path = path
-            command.append(target_path)
-
-        log.info(f"Executing tree command: {' '.join(command)}")
+            
+        log.info(f"Creating directory tree for path: {target_path} with depth {depth_limit}")
+        
         try:
-            # Adding '-a' might be useful to show hidden files, but could be verbose.
-            # Adding '-F' appends / to dirs, * to executables, etc.
-            # Using shell=True is generally discouraged, but might be needed if tree isn't directly in PATH
-            # or if handling complex paths. Sticking to list format for now.
-            process = subprocess.run(
-                command, 
-                capture_output=True, 
-                text=True, 
-                check=False, # Don't raise exception on non-zero exit code
-                timeout=15 # Add a timeout
-            )
-
-            if process.returncode == 0:
-                log.info(f"Tree command successful for path '{target_path}' with depth {depth_limit}.")
-                # Limit output size? Tree can be huge.
-                output = process.stdout.strip()
-                if len(output.splitlines()) > 200: # Limit lines as a proxy for size
-                     log.warning(f"Tree output for '{target_path}' exceeded 200 lines. Truncating.")
-                     output = "\n".join(output.splitlines()[:200]) + "\n... (output truncated)"
-                return output
-            elif process.returncode == 127 or "command not found" in process.stderr.lower():
-                 log.error(f"\'tree\' command not found. It might not be installed.")
-                 return "Error: 'tree' command not found. Please ensure it is installed and in the system's PATH."
-            else:
-                log.error(f"Tree command failed with return code {process.returncode}. Path: '{target_path}', Depth: {depth_limit}. Stderr: {process.stderr.strip()}")
-                error_detail = process.stderr.strip() if process.stderr else "(No stderr)"
-                return f"Error executing tree command (Code: {process.returncode}): {error_detail}"
-
-        except FileNotFoundError:
-             log.error(f"\'tree\' command not found (FileNotFoundError). It might not be installed.")
-             return "Error: 'tree' command not found. Please ensure it is installed and in the system's PATH."
-        except subprocess.TimeoutExpired:
-             log.error(f"Tree command timed out for path '{target_path}' after 15 seconds.")
-             return f"Error: Tree command timed out for path '{target_path}'. The directory might be too large or complex."
+            if not os.path.exists(target_path):
+                log.error(f"Path does not exist: {target_path}")
+                return f"Error: Path does not exist: {target_path}"
+                
+            if not os.path.isdir(target_path):
+                log.error(f"Path is not a directory: {target_path}")
+                return f"Error: Path is not a directory: {target_path}"
+                
+            # Generating the tree structure using a recursive approach
+            result = []
+            base_name = os.path.basename(target_path) or target_path
+            result.append(base_name)
+            
+            self._generate_tree(target_path, "", result, 0, depth_limit)
+            
+            # Limiting output size
+            output = "\n".join(result)
+            if len(result) > 200:  # Limit lines
+                log.warning(f"Tree output for '{target_path}' exceeded 200 lines. Truncating.")
+                output = "\n".join(result[:200]) + "\n... (output truncated)"
+                
+            return output
+            
         except Exception as e:
-            log.exception(f"An unexpected error occurred while executing tree command for path '{target_path}': {e}")
-            return f"An unexpected error occurred while executing tree: {str(e)}" 
+            log.exception(f"An unexpected error occurred while creating directory tree for path '{target_path}': {e}")
+            return f"An unexpected error occurred while creating directory tree: {str(e)}"
+            
+    def _generate_tree(self, path, prefix, result, current_depth, max_depth):
+        """Recursively generates the tree structure."""
+        if current_depth >= max_depth:
+            return
+            
+        try:
+            entries = sorted(os.listdir(path))
+            count = len(entries)
+            
+            for i, entry in enumerate(entries):
+                is_last = i == count - 1
+                entry_path = os.path.join(path, entry)
+                
+                # Determine connector and new prefix
+                connector = "└── " if is_last else "├── "
+                new_prefix = prefix + ("    " if is_last else "│   ")
+                
+                # Adding entry to result
+                result.append(f"{prefix}{connector}{entry}")
+                
+                # Recursively process directories
+                if os.path.isdir(entry_path):
+                    self._generate_tree(entry_path, new_prefix, result, current_depth + 1, max_depth)
+                    
+        except PermissionError:
+            result.append(f"{prefix}└── [Permission Denied]")
+        except Exception as e:
+            result.append(f"{prefix}└── [Error: {str(e)}]")

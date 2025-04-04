@@ -52,9 +52,9 @@ class CreateDirectoryTool(BaseTool):
             return f"Error creating directory: {str(e)}"
 
 class LsTool(BaseTool):
-    """Tool to list directory contents using 'ls -lA'."""
+    """Tool to list directory contents in a platform independent way."""
     name = "ls"
-    description = "Lists the contents of a specified directory (long format, including hidden files)."
+    description = "Lists the contents of a specified directory (detailed format, including hidden files)."
     args_schema: dict = {
         "path": {
             "type": "string",
@@ -64,57 +64,70 @@ class LsTool(BaseTool):
     required_args: list[str] = []
 
     def execute(self, path: str | None = None) -> str:
-        """Executes the 'ls -lA' command."""
+        """Executes directory listing command based on the current platform."""
         target_path = "."  # Default to current directory
         if path:
-            # Basic path safety - prevent navigating outside workspace root if needed
-            # For simplicity, assuming relative paths are okay for now
-            target_path = os.path.normpath(path) # Normalize path
+            # Basic path safety ( prevent navigating outside workspace root if needed)
+            target_path = os.path.normpath(path)  # Normalize path
             if target_path.startswith(".."):
-                 log.warning(f"Attempted to access parent directory in ls path: {path}")
-                 return f"Error: Invalid path '{path}'. Cannot access parent directories."
+                log.warning(f"Attempted to access parent directory in ls path: {path}")
+                return f"Error: Invalid path '{path}'. Cannot access parent directories."
 
-        command = ['ls', '-lA', target_path]
-        log.info(f"Executing ls command: {' '.join(command)}")
+        log.info(f"Executing directory listing for path: {target_path}")
 
         try:
-            process = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                check=False,  # Don't raise exception on non-zero exit code
-                timeout=15    # Add a timeout
-            )
-
-            if process.returncode == 0:
-                log.info(f"ls command successful for path '{target_path}'.")
-                # Limit output size? ls -l can be long.
-                output = process.stdout.strip()
-                # Example truncation (adjust as needed)
-                if len(output.splitlines()) > 100:
-                     log.warning(f"ls output for '{target_path}' exceeded 100 lines. Truncating.")
-                     output = "\n".join(output.splitlines()[:100]) + "\n... (output truncated)"
-                return output
-            else:
-                # Handle cases like directory not found specifically if possible
-                stderr_lower = process.stderr.lower()
-                if "no such file or directory" in stderr_lower:
-                     log.error(f"ls command failed: Directory not found '{target_path}'. Stderr: {process.stderr.strip()}")
-                     return f"Error: Directory not found: '{target_path}'"
-                else:
-                     log.error(f"ls command failed with return code {process.returncode}. Path: '{target_path}'. Stderr: {process.stderr.strip()}")
-                     error_detail = process.stderr.strip() if process.stderr else "(No stderr)"
-                     return f"Error executing ls command (Code: {process.returncode}): {error_detail}"
-
-        except FileNotFoundError:
-             # This means 'ls' itself wasn't found - unlikely but possible
-             log.error("'ls' command not found (FileNotFoundError). It might not be installed or in PATH.")
-             return "Error: 'ls' command not found. Please ensure it is installed and in the system's PATH."
-        except subprocess.TimeoutExpired:
-             log.error(f"ls command timed out for path '{target_path}' after 15 seconds.")
-             return f"Error: ls command timed out for path '{target_path}'."
+            # Platform-independent implementation using os module
+            if not os.path.exists(target_path):
+                log.error(f"Directory not found: {target_path}")
+                return f"Error: Directory not found: '{target_path}'"
+            
+            if not os.path.isdir(target_path):
+                log.error(f"Path is not a directory: {target_path}")
+                return f"Error: Path is not a directory: '{target_path}'"
+            
+            # Getting all entries in the directory, including hidden files
+            entries = []
+            for entry in os.listdir(target_path):
+                entry_path = os.path.join(target_path, entry)
+                stat_info = os.stat(entry_path)
+                
+                mode = "d" if os.path.isdir(entry_path) else "-"
+                
+                size = stat_info.st_size if not os.path.isdir(entry_path) else ""
+                
+                # Geting last modified time
+                mtime = stat_info.st_mtime
+                last_modified = f"{mtime}"
+                try:
+                    # Trying to format the time in a more readable way
+                    from datetime import datetime
+                    last_modified = datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+                except:
+                    pass
+                
+                entries.append((mode, last_modified, size, entry))
+            
+            # Sorting entries - directories first, then files
+            entries.sort(key=lambda x: (x[0] != 'd', x[3].lower()))
+            
+            # Formating output similar to ls -lA
+            output_lines = []
+            for mode, last_modified, size, entry in entries:
+                size_str = f"{size}" if size != "" else ""
+                output_lines.append(f"{mode}---- {last_modified} {size_str:10} {entry}")
+            
+            output = "\n".join(output_lines)
+            
+            # Truncate if necessary
+            if len(output_lines) > 100:
+                log.warning(f"ls output for '{target_path}' exceeded 100 lines. Truncating.")
+                output = "\n".join(output_lines[:100]) + "\n... (output truncated)"
+            
+            return output
+            
+        except PermissionError:
+            log.error(f"Permission denied for path: {target_path}")
+            return f"Error: Permission denied for path: '{target_path}'"
         except Exception as e:
-            log.exception(f"An unexpected error occurred while executing ls command for path '{target_path}': {e}")
-            return f"An unexpected error occurred while executing ls: {str(e)}"
-
-    # Assuming BaseTool provides a working get_function_declaration implementation
+            log.exception(f"An unexpected error occurred while listing directory '{target_path}': {e}")
+            return f"An unexpected error occurred: {str(e)}"
